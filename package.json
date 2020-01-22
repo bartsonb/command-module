@@ -1,0 +1,14 @@
+{
+  "name": "command-module",
+  "version": "1.0.0",
+  "description": "Command module for DAB Sea Drone.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Armin Bartnik <armin.bartnik@gmail.com>",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.1"
+  }
+}
