@@ -1,50 +1,49 @@
-let axios = require('axios');
-
 // let boat = require('boat');
 // let at = require('at');
 // let gps = require('gps');
+
+const HEARTBEAT_RATE = 5000;
+const COMMAND_EXECUTION_RATE = 1000;
 
 let status = {
     fence: [],
     position: [], 
     commands: []
-};
+}
 
-let setParams = object => {
-    for (let key in object) {
-        if (key in status && Array.isArray(object[key])) status[key] = object[key];
+let setParams = ({ fence, position, commands }) => {
+    if (valid(fence)) // Boat.fence = fence;
+
+    if (valid(position)) // Boat.position = position; 
+
+    if (valid(commands)) {
+        status.commands = commands;
+        executeCommand();
     }
-
-    if (status.commands.length > 0) updateBoatAction(status.commands);
 };
 
-let updateBoatStatus = (fence, position) => {
+let executeCommand = () => {
+    if (status.commands.includes('STOP')) status.commands = ['STOP'];
 
-};
-
-let updateBoatAction = (command) => {
-    switch(command) {
+    switch(status.commands.unshift()) {
         case 'SEARCH':
+            // Boat.search()
             break;
 
         case 'RETURN':
+            // Boat.return()
             break;
 
         case 'STOP':
+            // Boat.stop()
             break;
     }
 };
 
-let heartbeat = async () => {
-    await axios.get('url')
-        .then(res => res.json())
-        .then(res => setParams)
-        .catch(err => console.log);
-};
+let valid = (arr) => Array.isArray(arr) && arr.length > 0;
 
-setTimeout(heartbeat, 5000);
+let heartbeat = async () => {} // gsm.callApi();
 
-// Init
-(function() {
+setInterval(heartbeat, HEARTBEAT_RATE);
 
-})();
+setInterval(executeCommand, COMMAND_EXECUTION_RATE);

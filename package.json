@@ -8,7 +8,5 @@
   },
   "author": "Armin Bartnik <armin.bartnik@gmail.com>",
   "license": "ISC",
-  "dependencies": {
-    "axios": "^0.19.1"
-  }
+  "dependencies": {}
 }
