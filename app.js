@@ -10,17 +10,41 @@ let status = {
     commands: []
 };
 
-let heartbeat = () => {
-    axios.get('url')
+let setParams = object => {
+    for (let key in object) {
+        if (key in status && Array.isArray(object[key])) status[key] = object[key];
+    }
+
+    if (status.commands.length > 0) updateBoatAction(status.commands);
+};
+
+let updateBoatStatus = (fence, position) => {
+
+};
+
+let updateBoatAction = (command) => {
+    switch(command) {
+        case 'SEARCH':
+            break;
+
+        case 'RETURN':
+            break;
+
+        case 'STOP':
+            break;
+    }
+};
+
+let heartbeat = async () => {
+    await axios.get('url')
         .then(res => res.json())
-        .then(res => setParameters)
+        .then(res => setParams)
         .catch(err => console.log);
 };
 
-let setParameters = (obj) => {
-    status = obj;
+setTimeout(heartbeat, 5000);
 
-    
-};
+// Init
+(function() {
 
-setTimeout(heartbeat, 500);
+})();
