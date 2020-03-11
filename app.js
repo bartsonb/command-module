@@ -1,13 +1,25 @@
-const { navigationHandler } = require("boat-simulation/dist/navigationHandler");
+// Dependencies
+const SimpleNodeLogger = require('simple-node-logger');
+
+// DAB Dependencies
+const { navigationHandler } = require('boat-simulation/dist/navigationHandler');
 const { BoatControl } = require('motorControl');
-const { start, stop, post, reset } = require('communication/gsm');
+const start = require('communication/start');
+const stop = require('communication/stop');
+const post = require('communication/post');
 const getPosition = require('communication/gps');
 const getDetectedWaste = require('obstacle-detector');
 
+const logger = SimpleNodeLogger.createSimpleLogger({
+    logFilePath: `./logs/${new Date().toString().split(' ').slice(0, 5).join('-')}.log`,
+    timestampFormat:'HH:mm:ss.SSS'
+});
+
+const MODE = process.argv.slice(2)[0];
 const NAVIGATION_RATE = 1000;
-const HEARTBEAT_RATE = 5000 ;
-const WAIT_FOR_GPS_ACCURACY = 5000;
-const MAXIMUM_SERVER_RESPONSE_TIME = 20000;
+const HEARTBEAT_RATE = 5000;
+const WAIT_FOR_GPS_ACCURACY = (MODE === 'PRODUCTION') ? 60000 : 0;
+const MAXIMUM_SERVER_RESPONSE_TIME = 10000;
 
 let port = null;
 let parser = null;
@@ -25,6 +37,7 @@ let status = {
     control: BoatControl,
     trash: [],
     command: "STOP",
+    commandChanged: false,
     position: [],
     speed: 0,
     heading: 0
@@ -32,41 +45,34 @@ let status = {
 
 /**
  * @desc    Sets parameter to the status object after validating them.
+ * @params  coordinates, wayPoints, command, position, speed, heading
  */
 let setParams = ({ coordinates, wayPoints, command, position, speed, heading }) => {
+    if (valid(coordinates))
+        status.coordinates = coordinates;
 
-    if (valid(coordinates)) status.coordinates = coordinates;
+    if (valid(wayPoints))
+        status.wayPoints = wayPoints;
 
-    if (valid(wayPoints)) status.wayPoints = wayPoints;
+    if (valid(position))
+        status.position = position;
 
-    if (valid(position)) status.position = position;
+    if (valid(position)) if (status.startPoint === null)
+        status.startPoint = position;
 
-    if (valid(position)) {
-        if (status.startPoint === null) status.startPoint = position
+    if (typeof speed === "number")
+        status.speed = speed;
+
+    if (typeof heading === "number")
+        status.heading = heading;
+
+    if (typeof command === "string") {
+        if (status.command !== command) {
+            status.commandChanged = true;
+        }
+
+        status.command = command;
     }
-
-    if (typeof speed === "number") status.speed = speed;
-
-    if (typeof heading === "number") status.heading = heading;
-
-    if (typeof command === "string") status.command = command;
-};
-
-
-/**
- *
- * @param validKeys
- * @param object
- * @returns {{}}
- */
-let only = (validKeys, object) => {
-    let newObject = {};
-
-    Object.keys(object).forEach(key => {
-        if (validKeys.includes(key)) newObject[key] = object[key]
-    });
-
-    return newObject;
 };
 
 /**
@@ -79,14 +85,14 @@ let navigation = () => {
     if (valid(status.position) && valid(status.coordinates)) {
         let tempStatus = JSON.parse(JSON.stringify(status));
 
-        tempStatus.command = (tempStatus.command === 'SEARCH') ? 'START' : tempStatus.command;
-
         tempStatus.coordinates = tempStatus.coordinates.map(([lat, lng]) => ({
             longitude: lng,
             latitude: lat
         }));
 
-        // 52.503591, 13.409392
+        tempStatus.enableRandom = (tempStatus.command === 'RANDOM');
+
+
         tempStatus.position = {
             getHeading: () => tempStatus.heading,
             getPosition: () => {
@@ -96,7 +102,16 @@ let navigation = () => {
 
         tempStatus.control = BoatControl;
 
-        navigationHandler(only(["control", "position", "command", "coordinates"], tempStatus));
+        if (tempStatus.command === 'STOP') {
+            stopMotors();
+        } else {
+            navigationHandler(getKeys(["control", "position", "command", "coordinates", "trash", "enableRandom"], tempStatus));
+        }
+
+        if (status.commandChanged) {
+            status.commandChanged = false;
+            logger.info(`NAVIGATING: ${JSON.stringify(getKeys(["command"], tempStatus))}`);
+        }
     }
 };
 
@@ -105,19 +120,18 @@ let navigation = () => {
  *          maximum response time.
  */
 let restartHeartbeat = () => {
-    console.log('[ RESTARTING MODULE ]');
+    logger.info('[ RESTARTING MODULE ]');
+
+    parser.removeListener('data', parsePost);
+    stopMotors();
 
     clearTimeout(heartbeatTimeout);
-    clearInterval(intervals.navigation);
     clearInterval(intervals.heartbeat);
 
-    stop()
-        .then(res => {
-            if (res) start().then(res => {
-                console.log('[ RESTARTING HEARTBEAT ]');
-                heartbeat();
-            })
-        })
+    clearInterval(intervals.navigation);
+    intervals.navigation = null;
+    
+    heartbeat();
 };
 
 /**
@@ -130,32 +144,48 @@ let heartbeat = () => {
 
     getPosition(port, parser)
         .then(res => {
+            logger.info(`GPS-RES: ${res}`);
             setParams(JSON.parse(res));
 
-            post(JSON.stringify({ clear: true, ...getKeys(["position", "heading", "speed"], status) }))
-                .then(res => setParams(JSON.parse(res)))
+            post(port, parser, JSON.stringify({ clear: true, ...getKeys(["position", "heading", "speed"], status) }))
                 .then(res => {
-
+                    logger.info(`POST-RES: ${res}`);
+                    setParams(JSON.parse(res));
+                })
+                .then(res => {
                     // waiting for first position before starting the navigation
                     if (intervals.navigation === null) {
-                        console.log('[ STARTING NAVIGATION ]');
+                        logger.info(`[ STARTING NAVIGATION ]`);
                         intervals.navigation = setInterval(navigation, NAVIGATION_RATE);
                     }
 
                     clearTimeout(heartbeatTimeout);
                     intervals.heartbeat = setInterval(heartbeat, HEARTBEAT_RATE);
-                    console.log(status);
                 })
-                .catch(err => console.log('POST ERROR: ', err));
+                .catch(err => {
+                    logger.info(`POST-ERROR: ${err}`);
+                    restartHeartbeat();
+                });
         })
-        .catch(err => console.log('GPS ERROR: ', err));
+        .catch(err => {
+            logger.info(`GPS-ERROR: ${err}`);
+            restartHeartbeat();
+        });
+};
+
+/**
+ * @desc    Helper function to stop the drone motors
+ */
+let stopMotors = () => {
+    BoatControl.setPowerLeft(0);
+    BoatControl.setPowerRight(0);
 };
 
 /**
  * @desc    Removes all keys in the given object that are not listed in the given array.
  * @param   validKeys: array
  * @param   object: object
- * @returns Object
+ * @returns object
  */
 let getKeys = (validKeys, object) => {
     let newObject = {};
@@ -175,22 +205,6 @@ let getKeys = (validKeys, object) => {
 let valid = (arr) => Array.isArray(arr) && arr.length > 0;
 
 /**
- * @desc    Updating the console log.
- * @param   time: number
- */
-let wait = (time) => {
-    let seconds = time / 1000;
-    let icon = '࡫';
-
-    setInterval(() => {
-        process.stdout.write('[]');
-        process.stdout.clearLine();
-        process.stdout.cursorTo(0);
-        process.stdout.write("\n"); // end the line
-    }, seconds);
-};
-
-/**
  * @desc    Init-function which starts the gsm module and sets off the heartbeat
  *          and navigation interval.
  */
@@ -198,16 +212,31 @@ let wait = (time) => {
     start().then(({ port: _port, parser: _parser }) => {
         port = _port;
         parser = _parser;
-        console.log('[ GSM MODULE STARTED ]');
-        console.log('[ WAITING ' + WAIT_FOR_GPS_ACCURACY / 1000 + 's FOR BETTER GPS ACCURACY ]');
+        logger.info('[ GSM MODULE STARTED ]');
+        logger.info(`[ WAITING ${WAIT_FOR_GPS_ACCURACY / 1000}s FOR BETTER GPS ACCURACY ]`);
 
         getPosition(port, parser)
             .then(res => {
                setTimeout(() => {
-                   console.log('[ STARTING HEARTBEAT ]');
+                   logger.info('[ STARTING HEARTBEAT ]');
 
                    intervals.heartbeat = setInterval(heartbeat, HEARTBEAT_RATE);
                }, WAIT_FOR_GPS_ACCURACY);
             });
     });
 })();
+
+// node process event handling
+process.on('uncaughtException', (err) => {
+    logger.info(`ERROR: ${err}`);
+});
+
+process.on('warning', (err) => {
+    logger.info(`ERROR: ${err}`);
+});
+
+process.on('SIGINT', (code) => {
+    stopMotors();
+    logger.info(`[ DRONE PROCESS ENDED ]`);
+    process.exit();
+});

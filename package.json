@@ -12,6 +12,6 @@
     "boat-simulation": "git+https://gitlab.com/CaiSharp/boat-simulation.git",
     "motorControl": "git+https://github.com/beepART/motorControl.git",
     "communication": "git+https://github.com/tinokleinyahoode/communication.git",
-    "niels-he": "git+https://github.com/obstacle-detector-stub"
+    "obstacle-detector": "git+https://github.com/niels-he/obstacle-detector-stub.git"
   }
 }
