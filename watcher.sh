@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# get pid of node process
+# get pid of node process, if available
 read node_process <<< $(pidof node)
 echo "Node process pid: ${node_process:-no process found}"
 
 cd logs || exit
 
-# Get the latest logfile
+# Get the latest logfile filename
 #  -1 lists one file per line
 #  -r reverses output order (desc)
 read logfile <<< $(ls -1 -r *.log)
