@@ -57,8 +57,10 @@ let setParams = ({ coordinates, wayPoints, command, position, speed, heading }) 
     if (valid(position))
         status.position = position;
 
-    if (valid(position)) if (status.startPoint === null)
-        status.startPoint = position;
+    if (valid(position)) {
+        if (status.startPoint === null)
+            status.startPoint = position;
+    }
 
     if (typeof speed === "number")
         status.speed = speed;
@@ -150,7 +152,7 @@ let heartbeat = () => {
             post(port, parser, JSON.stringify({ clear: true, ...getKeys(["position", "heading", "speed"], status) }))
                 .then(res => {
                     logger.info(`POST-RES: ${res}`);
-                    setParams(JSON.parse(res));
+                    setParams(JSON.parse(res) || {});
                 })
                 .then(res => {
                     // waiting for first position before starting the navigation
