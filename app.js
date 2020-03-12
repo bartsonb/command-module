@@ -1,7 +1,4 @@
 // Dependencies
-const SimpleNodeLogger = require('simple-node-logger');
-
-// DAB Dependencies
 const { navigationHandler } = require('boat-simulation/dist/navigationHandler');
 const { BoatControl } = require('motorControl');
 const start = require('communication/start');
@@ -9,11 +6,7 @@ const stop = require('communication/stop');
 const post = require('communication/post');
 const getPosition = require('communication/gps');
 const getDetectedWaste = require('obstacle-detector');
-
-const logger = SimpleNodeLogger.createSimpleLogger({
-    logFilePath: `./logs/${new Date().toString().split(' ').slice(0, 5).join('-')}.log`,
-    timestampFormat:'HH:mm:ss.SSS'
-});
+const logger = require('logger');
 
 const MODE = process.argv.slice(2)[0];
 const NAVIGATION_RATE = 1000;
@@ -165,12 +158,12 @@ let heartbeat = () => {
                     intervals.heartbeat = setInterval(heartbeat, HEARTBEAT_RATE);
                 })
                 .catch(err => {
-                    logger.info(`POST-ERROR: ${err}`);
+                    logger.error(`POST: ${err}`);
                     restartHeartbeat();
                 });
         })
         .catch(err => {
-            logger.info(`GPS-ERROR: ${err}`);
+            logger.error(`GPS: ${err}`);
             restartHeartbeat();
         });
 };
@@ -230,11 +223,11 @@ let valid = (arr) => Array.isArray(arr) && arr.length > 0;
 
 // node process event handling
 process.on('uncaughtException', (err) => {
-    logger.info(`ERROR: ${err}`);
+    logger.error(`ERROR: ${err}`);
 });
 
 process.on('warning', (err) => {
-    logger.info(`ERROR: ${err}`);
+    logger.warn(`ERROR: ${err}`);
 });
 
 process.on('SIGINT', (code) => {
